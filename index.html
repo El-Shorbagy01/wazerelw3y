@@ -6,9 +6,25 @@
 <title>wazerelw3y — وزير الوعي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Amiri:wght@700&family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; }
+  ::selection { background: #B8862B; color: #171310; }
+  .article-content blockquote {
+    border-right: 3px solid #B8862B;
+    margin: 12px 0;
+    padding: 4px 12px;
+    opacity: 0.9;
+    font-style: italic;
+  }
+  [dir="ltr"] .article-content blockquote {
+    border-right: none;
+    border-left: 3px solid #B8862B;
+  }
+  .article-content p { margin: 0 0 12px 0; }
+  .article-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .article-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.35); }
 </style>
 
 <!-- React -->
@@ -19,6 +35,9 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<!-- Marked JS for Markdown -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -51,30 +70,38 @@ const COPY = {
   ar: {
     dir: "rtl", brand: "وزير الوعي", tagline: "مساحة لكتابة ما يستحق أن يُقال",
     newPost: "مقالة جديدة", editPost: "تعديل المقالة", titlePlaceholder: "عنوان المقالة", 
-    bodyPlaceholder: "اكتب هنا...", linkPlaceholder: "رابط المقال الأصلي (اختياري)",
+    bodyPlaceholder: "اكتب هنا... (يدعم تنسيق Markdown)", linkPlaceholder: "رابط المقال الأصلي (اختياري)",
     authorPlaceholder: "اسمك (اختياري)", publish: "نشر", update: "تحديث وتعديل", cancel: "إلغاء",
     empty: "لا توجد مقالات بعد. ابدأ بكتابة أول مقالة.", delete: "حذف", edit: "تعديل",
     confirmDelete: "حذف هذه المقالة نهائيًا؟", yes: "نعم، احذف", no: "تراجع",
     loading: "جارٍ التحميل...", by: "بقلم", switchLang: "English",
-    allCategories: "الكل", categoryLabel: "التصنيف:", share: "مشاركة",
+    allCategories: "الكل", bookmarks: "المحفوظات", searchPlaceholder: "ابحث عن مقالة أو كاتب...",
     copied: "تم نسخ الرابط!", sourceLink: "المقال الأصلي ↗",
     shareNote: "هذه المدونة مشتركة — كل من يفتح هذا الرابط يرى نفس المقالات.",
     connError: "تعذر الاتصال بقاعدة البيانات. تأكد من إعداد Firebase.",
+    readTime: (m) => `قراءة ${m} د`,
   },
   en: {
     dir: "ltr", brand: "wazerelw3y", tagline: "a space for writing what's worth saying",
     newPost: "New article", editPost: "Edit article", titlePlaceholder: "Article title", 
-    bodyPlaceholder: "Write here...", linkPlaceholder: "Original Article Link (optional)",
+    bodyPlaceholder: "Write here... (Markdown supported)", linkPlaceholder: "Original Article Link (optional)",
     authorPlaceholder: "Your name (optional)", publish: "Publish", update: "Update & Save", cancel: "Cancel",
-    empty: "No articles yet. Write the first one.", delete: "Delete", edit: "Edit",
+    empty: "No articles found.", delete: "Delete", edit: "Edit",
     confirmDelete: "Delete this article permanently?", yes: "Yes, delete", no: "Keep it",
     loading: "Loading...", by: "by", switchLang: "العربية",
-    allCategories: "All", categoryLabel: "Category:", share: "Share",
+    allCategories: "All", bookmarks: "Saved", searchPlaceholder: "Search posts or authors...",
     copied: "Link copied!", sourceLink: "Original Source ↗",
     shareNote: "This blog is shared — anyone with this link sees the same articles.",
     connError: "Couldn't connect to the database. Check your Firebase setup.",
+    readTime: (m) => `${m} min read`,
   },
 };
+
+function getReadingTime(text, lang) {
+  const words = text ? text.trim().split(/\s+/).length : 0;
+  const wpm = lang === "ar" ? 150 : 200;
+  return Math.max(1, Math.ceil(words / wpm));
+}
 
 function timeAgo(ts, lang) {
   const days = Math.floor((Date.now() - ts) / 86400000);
@@ -90,9 +117,11 @@ function Icon({ path, size = 17, color = "currentColor" }) {
 const TrashIcon = (p) => <Icon {...p} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />;
 const EditIcon = (p) => <Icon {...p} path={<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>} />;
 const ShareIcon = (p) => <Icon {...p} path={<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>} />;
+const BookmarkIcon = ({ filled, ...p }) => <svg width={p.size || 17} height={p.size || 17} viewBox="0 0 24 24" fill={filled ? (p.color || "currentColor") : "none"} stroke={p.color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>;
 const ExternalLinkIcon = (p) => <Icon {...p} path={<><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></>} />;
 const PlusIcon = (p) => <Icon {...p} path={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />;
 const GlobeIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>} />;
+const SearchIcon = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} />;
 const XIcon = (p) => <Icon {...p} path={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />;
 const FeatherIcon = (p) => <Icon {...p} path={<><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></>} />;
 
@@ -103,9 +132,12 @@ function Blog() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [savedIds, setSavedIds] = useState(() => JSON.parse(localStorage.getItem("w3y_saved") || "[]"));
   const [confirmId, setConfirmId] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
-  
+  const [scrollProgress, setScrollProgress] = useState(0);
+
   const [form, setForm] = useState({ title: "", body: "", author: "", link: "", category: "general" });
   const titleRef = useRef(null);
   const t = COPY[lang];
@@ -115,10 +147,28 @@ function Blog() {
       (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
       () => setError(true)
     );
-    return unsub;
+
+    const handleScroll = () => {
+      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollProgress(totalHeight > 0 ? (window.scrollY / totalHeight) * 100 : 0);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => {
+      unsub();
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem("w3y_saved", JSON.stringify(savedIds));
+  }, [savedIds]);
+
   useEffect(() => { if (showForm) setTimeout(() => titleRef.current?.focus(), 50); }, [showForm]);
+
+  const toggleBookmark = (id) => {
+    setSavedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
 
   const resetForm = () => {
     setForm({ title: "", body: "", author: "", link: "", category: "general" });
@@ -173,7 +223,7 @@ function Blog() {
           text: `${post.title} - ${t.brand}`,
           url: window.location.href,
         });
-      } catch (err) { /* cancelled */ }
+      } catch (err) {}
     } else {
       navigator.clipboard.writeText(`${post.title}\n${window.location.href}`);
       setCopiedId(post.id);
@@ -181,10 +231,27 @@ function Blog() {
     }
   }
 
-  const filteredPosts = posts ? posts.filter(p => activeCategory === "all" || p.category === activeCategory) : null;
+  const filteredPosts = posts ? posts.filter(p => {
+    const matchesCategory = activeCategory === "all" ? true :
+                            activeCategory === "saved" ? savedIds.includes(p.id) :
+                            p.category === activeCategory;
+    
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSearch = !query || 
+      p.title.toLowerCase().includes(query) || 
+      p.body.toLowerCase().includes(query) || 
+      (p.author && p.author.toLowerCase().includes(query));
+
+    return matchesCategory && matchesSearch;
+  }) : null;
 
   return (
     <div dir={t.dir} style={{ background: ink, minHeight: "100vh", fontFamily: lang === "ar" ? "'Tajawal', sans-serif" : "'Inter', sans-serif" }}>
+      {/* Scroll Reading Progress Bar */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, background: `${gold}33`, zIndex: 9999 }}>
+        <div style={{ height: "100%", background: gold, width: `${scrollProgress}%`, transition: "width 0.1s linear" }} />
+      </div>
+
       <header style={{ borderBottom: `1px solid ${gold}33`, padding: "28px 20px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -201,7 +268,24 @@ function Blog() {
       <main style={{ maxWidth: 720, margin: "0 auto", padding: "28px 20px 80px" }}>
         {error && <div style={{ background: `${rust}22`, border: `1px solid ${rust}`, color: paper, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 14 }}>{t.connError}</div>}
 
-        {/* Categories Bar & New Post Button */}
+        {/* Search Bar */}
+        <div style={{ position: "relative", marginBottom: 20 }}>
+          <div style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [lang === "ar" ? "right" : "left"]: 12, color: `${paper}66`, display: "flex" }}>
+            <SearchIcon size={16} />
+          </div>
+          <input 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t.searchPlaceholder}
+            style={{
+              width: "100%", background: `${paper}11`, border: `1px solid ${gold}33`, borderRadius: 10,
+              padding: lang === "ar" ? "10px 38px 10px 14px" : "10px 14px 10px 38px",
+              color: paper, fontSize: 14, outline: "none"
+            }}
+          />
+        </div>
+
+        {/* Category & Action Bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button 
@@ -217,6 +301,11 @@ function Blog() {
                 {c[lang]}
               </button>
             ))}
+            <button 
+              onClick={() => setActiveCategory("saved")} 
+              style={{ background: activeCategory === "saved" ? gold : "transparent", color: activeCategory === "saved" ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <BookmarkIcon size={13} filled={activeCategory === "saved"} /> {t.bookmarks} ({savedIds.length})
+            </button>
           </div>
 
           <button onClick={() => { resetForm(); setShowForm(true); }} style={{ display: "flex", alignItems: "center", gap: 8, background: gold, color: ink, border: "none", borderRadius: 10, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
@@ -224,7 +313,7 @@ function Blog() {
           </button>
         </div>
 
-        {/* Post Creation / Edit Form */}
+        {/* Form Modal */}
         {showForm && (
           <form onSubmit={submitPost} style={{ background: paper, borderRadius: 14, padding: 20, marginBottom: 28, boxShadow: "0 8px 30px rgba(0,0,0,0.35)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -235,7 +324,7 @@ function Blog() {
             <input ref={titleRef} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t.titlePlaceholder}
               style={{ width: "100%", border: "none", borderBottom: `2px solid ${ink}22`, background: "transparent", fontSize: 20, fontWeight: 700, fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", color: ink, padding: "6px 2px", marginBottom: 14, outline: "none" }} />
             
-            <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder={t.bodyPlaceholder} rows={6}
+            <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder={t.bodyPlaceholder} rows={7}
               style={{ width: "100%", border: `1px solid ${ink}22`, borderRadius: 8, background: "transparent", fontSize: 15, color: ink, padding: 10, marginBottom: 14, outline: "none", resize: "vertical", fontFamily: "inherit" }} />
             
             <input value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder={t.linkPlaceholder} type="url"
@@ -263,13 +352,18 @@ function Blog() {
         {filteredPosts === null && !error && <div style={{ textAlign: "center", color: `${paper}88`, padding: 60 }}>{t.loading}</div>}
         {filteredPosts !== null && filteredPosts.length === 0 && <div style={{ textAlign: "center", color: `${paper}66`, padding: "60px 20px", fontSize: 15 }}>{t.empty}</div>}
 
+        {/* Articles List */}
         {filteredPosts !== null && filteredPosts.map((p) => {
           const catObj = CATEGORIES.find(c => c.id === p.category);
+          const isSaved = savedIds.includes(p.id);
+          const htmlContent = marked.parse(p.body || "");
+
           return (
-            <article key={p.id} style={{ background: paper, borderRadius: 14, padding: 22, marginBottom: 18, boxShadow: "0 4px 18px rgba(0,0,0,0.25)" }}>
+            <article key={p.id} className="article-card" style={{ background: paper, borderRadius: 14, padding: 22, marginBottom: 18, boxShadow: "0 4px 18px rgba(0,0,0,0.25)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                 <h2 style={{ fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", fontSize: 22, fontWeight: 700, color: ink, margin: "0 0 8px" }}>{p.title}</h2>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <button onClick={() => toggleBookmark(p.id)} title={t.bookmarks} style={{ background: "none", border: "none", cursor: "pointer", color: gold }}><BookmarkIcon size={17} filled={isSaved} /></button>
                   <button onClick={() => handleShare(p)} title={t.share} style={{ background: "none", border: "none", cursor: "pointer", color: gold }}><ShareIcon size={17} /></button>
                   <button onClick={() => handleEditClick(p)} title={t.edit} style={{ background: "none", border: "none", cursor: "pointer", color: ink, opacity: 0.7 }}><EditIcon size={17} /></button>
                   <button onClick={() => setConfirmId(p.id)} title={t.delete} style={{ background: "none", border: "none", cursor: "pointer", color: rust, opacity: 0.7 }}><TrashIcon size={17} /></button>
@@ -280,13 +374,19 @@ function Blog() {
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: `${ink}77`, marginBottom: 12, flexWrap: "wrap" }}>
                 <span>{p.author ? `${t.by} ${p.author} · ` : ""}{timeAgo(p.ts, lang)}</span>
+                <span>·</span>
+                <span>{t.readTime(getReadingTime(p.body, lang))}</span>
                 {catObj && <span style={{ background: `${ink}11`, borderRadius: 4, padding: "2px 6px", fontSize: 11, color: ink }}>{catObj[lang]}</span>}
               </div>
 
-              <p style={{ fontSize: 15.5, lineHeight: 1.75, color: `${ink}dd`, whiteSpace: "pre-wrap", marginBottom: p.link ? 14 : 0 }}>{p.body}</p>
+              <div 
+                className="article-content"
+                style={{ fontSize: 15.5, lineHeight: 1.8, color: `${ink}dd` }} 
+                dangerouslySetInnerHTML={{ __html: htmlContent }} 
+              />
 
               {p.link && (
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 14 }}>
                   <a href={p.link} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: rust, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
                     <ExternalLinkIcon size={14} /> {t.sourceLink}
                   </a>
