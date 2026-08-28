@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>wazerelw3y — وزير الوعي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Amiri:wght@700&family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+</style>
+
+<!-- React (no build step needed) -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Firebase (compat build = no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+  // ====== FIREBASE CONFIG — replace with your own project's config ======
+  // Get this from: Firebase Console → Project settings → General → Your apps → SDK setup
+  const firebaseConfig = {
+    apiKey: "AIzaSyCbHmwro6rGmo7FIpYfKWPb_-ThRW_JNZg",
+    authDomain: "wazerelw3y.firebaseapp.com",
+    projectId: "wazerelw3y",
+    storageBucket: "wazerelw3y.firebasestorage.app",
+    messagingSenderId: "955701325729",
+    appId: "1:955701325729:web:940c9487a2c3fbd23ea5e0",
+    measurementId: "G-WRJ92JQ2KF"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const COPY = {
+  ar: {
+    dir: "rtl", brand: "وزير الوعي", tagline: "مساحة لكتابة ما يستحق أن يُقال",
+    newPost: "مقالة جديدة", titlePlaceholder: "عنوان المقالة", bodyPlaceholder: "اكتب هنا...",
+    authorPlaceholder: "اسمك (اختياري)", publish: "نشر", cancel: "إلغاء",
+    empty: "لا توجد مقالات بعد. ابدأ بكتابة أول مقالة.", delete: "حذف",
+    confirmDelete: "حذف هذه المقالة نهائيًا؟", yes: "نعم، احذف", no: "تراجع",
+    loading: "جارٍ التحميل...", by: "بقلم", switchLang: "English",
+    shareNote: "هذه المدونة مشتركة — كل من يفتح هذا الرابط يرى نفس المقالات.",
+    connError: "تعذر الاتصال بقاعدة البيانات. تأكد من إعداد Firebase.",
+  },
+  en: {
+    dir: "ltr", brand: "wazerelw3y", tagline: "a space for writing what's worth saying",
+    newPost: "New article", titlePlaceholder: "Article title", bodyPlaceholder: "Write here...",
+    authorPlaceholder: "Your name (optional)", publish: "Publish", cancel: "Cancel",
+    empty: "No articles yet. Write the first one.", delete: "Delete",
+    confirmDelete: "Delete this article permanently?", yes: "Yes, delete", no: "Keep it",
+    loading: "Loading...", by: "by", switchLang: "العربية",
+    shareNote: "This blog is shared — anyone with this link sees the same articles.",
+    connError: "Couldn't connect to the database. Check your Firebase setup.",
+  },
+};
+
+function timeAgo(ts, lang) {
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (lang === "ar") { if (days <= 0) return "اليوم"; if (days === 1) return "أمس"; return `منذ ${days} يوم`; }
+  if (days <= 0) return "today"; if (days === 1) return "yesterday"; return `${days}d ago`;
+}
+
+const ink = "#171310", paper = "#F6EFE2", gold = "#B8862B", rust = "#9C4A3C";
+
+function Icon({ path, size = 17, color = "currentColor" }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{path}</svg>;
+}
+const TrashIcon = (p) => <Icon {...p} path={<><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>} />;
+const PlusIcon = (p) => <Icon {...p} path={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />;
+const GlobeIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>} />;
+const XIcon = (p) => <Icon {...p} path={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />;
+const FeatherIcon = (p) => <Icon {...p} path={<><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></>} />;
+
+function Blog() {
+  const [lang, setLang] = useState("ar");
+  const [posts, setPosts] = useState(null);
+  const [error, setError] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [confirmId, setConfirmId] = useState(null);
+  const [form, setForm] = useState({ title: "", body: "", author: "" });
+  const titleRef = useRef(null);
+  const t = COPY[lang];
+
+  useEffect(() => {
+    const unsub = db.collection("posts").orderBy("ts", "desc").onSnapshot(
+      (snap) => setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      () => setError(true)
+    );
+    return unsub;
+  }, []);
+
+  useEffect(() => { if (showForm) setTimeout(() => titleRef.current?.focus(), 50); }, [showForm]);
+
+  async function submitPost(e) {
+    e.preventDefault();
+    if (!form.title.trim() || !form.body.trim()) return;
+    await db.collection("posts").add({
+      title: form.title.trim(), body: form.body.trim(), author: form.author.trim(), ts: Date.now(),
+    });
+    setForm({ title: "", body: "", author: "" });
+    setShowForm(false);
+  }
+
+  async function doDelete(id) {
+    await db.collection("posts").doc(id).delete();
+    setConfirmId(null);
+  }
+
+  return (
+    <div dir={t.dir} style={{ background: ink, minHeight: "100vh", fontFamily: lang === "ar" ? "'Tajawal', sans-serif" : "'Inter', sans-serif" }}>
+      <header style={{ borderBottom: `1px solid ${gold}33`, padding: "28px 20px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <FeatherIcon size={20} color={gold} />
+            <h1 style={{ color: paper, fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", fontSize: lang === "ar" ? 30 : 26, fontWeight: 700, margin: 0 }}>{t.brand}</h1>
+          </div>
+          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1px solid ${gold}66`, color: gold, borderRadius: 999, padding: "6px 14px", fontSize: 13, cursor: "pointer" }}>
+            <GlobeIcon size={14} />{t.switchLang}
+          </button>
+        </div>
+        <p style={{ maxWidth: 720, margin: "8px auto 0", color: `${paper}99`, fontSize: 14 }}>{t.tagline}</p>
+      </header>
+
+      <main style={{ maxWidth: 720, margin: "0 auto", padding: "28px 20px 80px" }}>
+        {error && <div style={{ background: `${rust}22`, border: `1px solid ${rust}`, color: paper, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 14 }}>{t.connError}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
+          <button onClick={() => setShowForm(true)} style={{ display: "flex", alignItems: "center", gap: 8, background: gold, color: ink, border: "none", borderRadius: 10, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+            <PlusIcon size={16} />{t.newPost}
+          </button>
+        </div>
+
+        {showForm && (
+          <form onSubmit={submitPost} style={{ background: paper, borderRadius: 14, padding: 20, marginBottom: 28, boxShadow: "0 8px 30px rgba(0,0,0,0.35)" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setShowForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: `${ink}88` }}><XIcon size={18} /></button>
+            </div>
+            <input ref={titleRef} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t.titlePlaceholder}
+              style={{ width: "100%", border: "none", borderBottom: `2px solid ${ink}22`, background: "transparent", fontSize: 20, fontWeight: 700, fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", color: ink, padding: "6px 2px", marginBottom: 14, outline: "none" }} />
+            <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder={t.bodyPlaceholder} rows={6}
+              style={{ width: "100%", border: `1px solid ${ink}22`, borderRadius: 8, background: "transparent", fontSize: 15, color: ink, padding: 10, marginBottom: 14, outline: "none", resize: "vertical", fontFamily: "inherit" }} />
+            <input value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} placeholder={t.authorPlaceholder}
+              style={{ width: "100%", border: `1px solid ${ink}22`, borderRadius: 8, background: "transparent", fontSize: 14, color: ink, padding: "8px 10px", marginBottom: 16, outline: "none" }} />
+            <div style={{ display: "flex", gap: 10, justifyContent: lang === "ar" ? "flex-start" : "flex-end" }}>
+              <button type="button" onClick={() => setShowForm(false)} style={{ background: "none", border: `1px solid ${ink}33`, borderRadius: 8, padding: "8px 16px", cursor: "pointer", color: ink, fontSize: 14 }}>{t.cancel}</button>
+              <button type="submit" style={{ background: rust, color: paper, border: "none", borderRadius: 8, padding: "8px 18px", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>{t.publish}</button>
+            </div>
+          </form>
+        )}
+
+        {posts === null && !error && <div style={{ textAlign: "center", color: `${paper}88`, padding: 60 }}>{t.loading}</div>}
+        {posts !== null && posts.length === 0 && <div style={{ textAlign: "center", color: `${paper}66`, padding: "60px 20px", fontSize: 15 }}>{t.empty}</div>}
+
+        {posts !== null && posts.map((p) => (
+          <article key={p.id} style={{ background: paper, borderRadius: 14, padding: 22, marginBottom: 18, boxShadow: "0 4px 18px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <h2 style={{ fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", fontSize: 22, fontWeight: 700, color: ink, margin: "0 0 8px" }}>{p.title}</h2>
+              <button onClick={() => setConfirmId(p.id)} title={t.delete} style={{ background: "none", border: "none", cursor: "pointer", color: rust, opacity: 0.7, flexShrink: 0 }}><TrashIcon size={17} /></button>
+            </div>
+            <p style={{ fontSize: 13, color: `${ink}77`, marginBottom: 12 }}>{p.author ? `${t.by} ${p.author} · ` : ""}{timeAgo(p.ts, lang)}</p>
+            <p style={{ fontSize: 15.5, lineHeight: 1.75, color: `${ink}dd`, whiteSpace: "pre-wrap" }}>{p.body}</p>
+
+            {confirmId === p.id && (
+              <div style={{ marginTop: 14, background: `${rust}11`, border: `1px solid ${rust}55`, borderRadius: 10, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <span style={{ fontSize: 14, color: ink }}>{t.confirmDelete}</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setConfirmId(null)} style={{ background: "none", border: `1px solid ${ink}33`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontSize: 13, color: ink }}>{t.no}</button>
+                  <button onClick={() => doDelete(p.id)} style={{ background: rust, color: paper, border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>{t.yes}</button>
+                </div>
+              </div>
+            )}
+          </article>
+        ))}
+      </main>
+
+      <footer style={{ maxWidth: 720, margin: "0 auto", padding: "0 20px 40px", textAlign: "center" }}>
+        <p style={{ fontSize: 12.5, color: `${paper}55` }}>{t.shareNote}</p>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Blog />);
+</script>
+</body>
+</html>
