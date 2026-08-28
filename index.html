@@ -59,7 +59,7 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   { id: "philosophy", ar: "فلسفة", en: "Philosophy" },
   { id: "thought", ar: "فكر", en: "Thought" },
   { id: "literature", ar: "أدب", en: "Literature" },
@@ -76,10 +76,11 @@ const COPY = {
     confirmDelete: "حذف هذه المقالة نهائيًا؟", yes: "نعم، احذف", no: "تراجع",
     loading: "جارٍ التحميل...", by: "بقلم", switchLang: "English",
     allCategories: "الكل", bookmarks: "المحفوظات", searchPlaceholder: "ابحث عن مقالة أو كاتب...",
-    copied: "تم نسخ الرابط!", sourceLink: "المقال الأصلي ↗",
+    copied: "تم نسخ النص!", sourceLink: "المقال الأصلي ↗",
     shareNote: "هذه المدونة مشتركة — كل من يفتح هذا الرابط يرى نفس المقالات.",
     connError: "تعذر الاتصال بقاعدة البيانات. تأكد من إعداد Firebase.",
-    readTime: (m) => `قراءة ${m} د`,
+    readTime: (m) => `قراءة ${m} د`, addCategory: "+ إضافة تصنيف جديد", newCatPlaceholder: "اسم التصنيف الجديد",
+    pinned: "مثبّت",
   },
   en: {
     dir: "ltr", brand: "wazerelw3y", tagline: "a space for writing what's worth saying",
@@ -90,10 +91,11 @@ const COPY = {
     confirmDelete: "Delete this article permanently?", yes: "Yes, delete", no: "Keep it",
     loading: "Loading...", by: "by", switchLang: "العربية",
     allCategories: "All", bookmarks: "Saved", searchPlaceholder: "Search posts or authors...",
-    copied: "Link copied!", sourceLink: "Original Source ↗",
+    copied: "Content copied!", sourceLink: "Original Source ↗",
     shareNote: "This blog is shared — anyone with this link sees the same articles.",
     connError: "Couldn't connect to the database. Check your Firebase setup.",
-    readTime: (m) => `${m} min read`,
+    readTime: (m) => `${m} min read`, addCategory: "+ Add Custom Category", newCatPlaceholder: "New category name",
+    pinned: "Pinned",
   },
 };
 
@@ -122,12 +124,18 @@ const ExternalLinkIcon = (p) => <Icon {...p} path={<><path d="M18 13v6a2 2 0 0 1
 const PlusIcon = (p) => <Icon {...p} path={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />;
 const GlobeIcon = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></>} />;
 const SearchIcon = (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} />;
+const PinIcon = ({ filled, ...p }) => <svg width={p.size || 17} height={p.size || 17} viewBox="0 0 24 24" fill={filled ? (p.color || "currentColor") : "none"} stroke={p.color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>;
+const CopyIcon = (p) => <Icon {...p} path={<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>} />;
 const XIcon = (p) => <Icon {...p} path={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />;
 const FeatherIcon = (p) => <Icon {...p} path={<><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></>} />;
 
 function Blog() {
   const [lang, setLang] = useState("ar");
   const [posts, setPosts] = useState(null);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem("w3y_categories");
+    return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+  });
   const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -138,7 +146,8 @@ function Blog() {
   const [copiedId, setCopiedId] = useState(null);
   const [scrollProgress, setScrollProgress] = useState(0);
 
-  const [form, setForm] = useState({ title: "", body: "", author: "", link: "", category: "general" });
+  const [form, setForm] = useState({ title: "", body: "", author: "", link: "", category: "general", customCategory: "" });
+  const [isAddingCustomCat, setIsAddingCustomCat] = useState(false);
   const titleRef = useRef(null);
   const t = COPY[lang];
 
@@ -160,18 +169,21 @@ function Blog() {
     };
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("w3y_saved", JSON.stringify(savedIds));
-  }, [savedIds]);
-
+  useEffect(() => { localStorage.setItem("w3y_saved", JSON.stringify(savedIds)); }, [savedIds]);
+  useEffect(() => { localStorage.setItem("w3y_categories", JSON.stringify(categories)); }, [categories]);
   useEffect(() => { if (showForm) setTimeout(() => titleRef.current?.focus(), 50); }, [showForm]);
 
   const toggleBookmark = (id) => {
     setSavedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
+  const togglePin = async (id, currentPinned) => {
+    await db.collection("posts").doc(id).update({ isPinned: !currentPinned });
+  };
+
   const resetForm = () => {
-    setForm({ title: "", body: "", author: "", link: "", category: "general" });
+    setForm({ title: "", body: "", author: "", link: "", category: "general", customCategory: "" });
+    setIsAddingCustomCat(false);
     setEditingId(null);
     setShowForm(false);
   };
@@ -182,7 +194,8 @@ function Blog() {
       body: p.body || "",
       author: p.author || "",
       link: p.link || "",
-      category: p.category || "general"
+      category: p.category || "general",
+      customCategory: ""
     });
     setEditingId(p.id);
     setShowForm(true);
@@ -192,19 +205,32 @@ function Blog() {
     e.preventDefault();
     if (!form.title.trim() || !form.body.trim()) return;
 
+    let finalCategory = form.category;
+
+    if (isAddingCustomCat && form.customCategory.trim()) {
+      const catName = form.customCategory.trim();
+      const catId = catName.toLowerCase().replace(/\s+/g, "_");
+      
+      if (!categories.some(c => c.id === catId)) {
+        const newCat = { id: catId, ar: catName, en: catName };
+        setCategories(prev => [...prev, newCat]);
+      }
+      finalCategory = catId;
+    }
+
     const payload = {
       title: form.title.trim(),
       body: form.body.trim(),
       author: form.author.trim(),
       link: form.link.trim(),
-      category: form.category,
+      category: finalCategory,
       updatedAt: Date.now()
     };
 
     if (editingId) {
       await db.collection("posts").doc(editingId).update(payload);
     } else {
-      await db.collection("posts").add({ ...payload, ts: Date.now() });
+      await db.collection("posts").add({ ...payload, ts: Date.now(), isPinned: false });
     }
 
     resetForm();
@@ -215,39 +241,41 @@ function Blog() {
     setConfirmId(null);
   }
 
+  const copyToClipboard = (post) => {
+    navigator.clipboard.writeText(`${post.title}\n\n${post.body}`);
+    setCopiedId(post.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   async function handleShare(post) {
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: post.title,
-          text: `${post.title} - ${t.brand}`,
-          url: window.location.href,
-        });
+        await navigator.share({ title: post.title, text: `${post.title} - ${t.brand}`, url: window.location.href });
       } catch (err) {}
     } else {
-      navigator.clipboard.writeText(`${post.title}\n${window.location.href}`);
-      setCopiedId(post.id);
-      setTimeout(() => setCopiedId(null), 2000);
+      copyToClipboard(post);
     }
   }
 
-  const filteredPosts = posts ? posts.filter(p => {
-    const matchesCategory = activeCategory === "all" ? true :
-                            activeCategory === "saved" ? savedIds.includes(p.id) :
-                            p.category === activeCategory;
-    
-    const query = searchQuery.toLowerCase().trim();
-    const matchesSearch = !query || 
-      p.title.toLowerCase().includes(query) || 
-      p.body.toLowerCase().includes(query) || 
-      (p.author && p.author.toLowerCase().includes(query));
+  // Sorting & Filtering (Pinned posts appear first)
+  const filteredPosts = posts ? posts
+    .filter(p => {
+      const matchesCategory = activeCategory === "all" ? true :
+                              activeCategory === "saved" ? savedIds.includes(p.id) :
+                              p.category === activeCategory;
+      
+      const query = searchQuery.toLowerCase().trim();
+      const matchesSearch = !query || 
+        p.title.toLowerCase().includes(query) || 
+        p.body.toLowerCase().includes(query) || 
+        (p.author && p.author.toLowerCase().includes(query));
 
-    return matchesCategory && matchesSearch;
-  }) : null;
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0)) : null;
 
   return (
     <div dir={t.dir} style={{ background: ink, minHeight: "100vh", fontFamily: lang === "ar" ? "'Tajawal', sans-serif" : "'Inter', sans-serif" }}>
-      {/* Scroll Reading Progress Bar */}
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, background: `${gold}33`, zIndex: 9999 }}>
         <div style={{ height: "100%", background: gold, width: `${scrollProgress}%`, transition: "width 0.1s linear" }} />
       </div>
@@ -268,7 +296,6 @@ function Blog() {
       <main style={{ maxWidth: 720, margin: "0 auto", padding: "28px 20px 80px" }}>
         {error && <div style={{ background: `${rust}22`, border: `1px solid ${rust}`, color: paper, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 14 }}>{t.connError}</div>}
 
-        {/* Search Bar */}
         <div style={{ position: "relative", marginBottom: 20 }}>
           <div style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [lang === "ar" ? "right" : "left"]: 12, color: `${paper}66`, display: "flex" }}>
             <SearchIcon size={16} />
@@ -285,25 +312,15 @@ function Blog() {
           />
         </div>
 
-        {/* Category & Action Bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button 
-              onClick={() => setActiveCategory("all")} 
-              style={{ background: activeCategory === "all" ? gold : "transparent", color: activeCategory === "all" ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer" }}>
-              {t.allCategories}
-            </button>
-            {CATEGORIES.map(c => (
-              <button 
-                key={c.id} 
-                onClick={() => setActiveCategory(c.id)} 
-                style={{ background: activeCategory === c.id ? gold : "transparent", color: activeCategory === c.id ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer" }}>
-                {c[lang]}
+            <button onClick={() => setActiveCategory("all")} style={{ background: activeCategory === "all" ? gold : "transparent", color: activeCategory === "all" ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer" }}>{t.allCategories}</button>
+            {categories.map(c => (
+              <button key={c.id} onClick={() => setActiveCategory(c.id)} style={{ background: activeCategory === c.id ? gold : "transparent", color: activeCategory === c.id ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer" }}>
+                {c[lang] || c.ar}
               </button>
             ))}
-            <button 
-              onClick={() => setActiveCategory("saved")} 
-              style={{ background: activeCategory === "saved" ? gold : "transparent", color: activeCategory === "saved" ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={() => setActiveCategory("saved")} style={{ background: activeCategory === "saved" ? gold : "transparent", color: activeCategory === "saved" ? ink : paper, border: `1px solid ${gold}55`, borderRadius: 20, padding: "5px 14px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
               <BookmarkIcon size={13} filled={activeCategory === "saved"} /> {t.bookmarks} ({savedIds.length})
             </button>
           </div>
@@ -313,7 +330,6 @@ function Blog() {
           </button>
         </div>
 
-        {/* Form Modal */}
         {showForm && (
           <form onSubmit={submitPost} style={{ background: paper, borderRadius: 14, padding: 20, marginBottom: 28, boxShadow: "0 8px 30px rgba(0,0,0,0.35)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -332,12 +348,30 @@ function Blog() {
 
             <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               <input value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} placeholder={t.authorPlaceholder}
-                style={{ flex: 1, minWidth: 180, border: `1px solid ${ink}22`, borderRadius: 8, background: "transparent", fontSize: 14, color: ink, padding: "8px 10px", outline: "none" }} />
+                style={{ flex: 1, minWidth: 160, border: `1px solid ${ink}22`, borderRadius: 8, background: "transparent", fontSize: 14, color: ink, padding: "8px 10px", outline: "none" }} />
               
-              <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                style={{ border: `1px solid ${ink}22`, borderRadius: 8, background: paper, fontSize: 14, color: ink, padding: "8px 10px", outline: "none" }}>
-                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c[lang]}</option>)}
-              </select>
+              {!isAddingCustomCat ? (
+                <select 
+                  value={form.category} 
+                  onChange={(e) => {
+                    if (e.target.value === "NEW_CUSTOM") {
+                      setIsAddingCustomCat(true);
+                    } else {
+                      setForm({ ...form, category: e.target.value });
+                    }
+                  }}
+                  style={{ border: `1px solid ${ink}22`, borderRadius: 8, background: paper, fontSize: 14, color: ink, padding: "8px 10px", outline: "none" }}>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c[lang] || c.ar}</option>)}
+                  <option value="NEW_CUSTOM">{t.addCategory}</option>
+                </select>
+              ) : (
+                <input 
+                  value={form.customCategory} 
+                  onChange={(e) => setForm({ ...form, customCategory: e.target.value })} 
+                  placeholder={t.newCatPlaceholder}
+                  style={{ border: `1px solid ${ink}22`, borderRadius: 8, background: "transparent", fontSize: 14, color: ink, padding: "8px 10px", outline: "none" }} 
+                />
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 10, justifyContent: lang === "ar" ? "flex-start" : "flex-end" }}>
@@ -352,18 +386,22 @@ function Blog() {
         {filteredPosts === null && !error && <div style={{ textAlign: "center", color: `${paper}88`, padding: 60 }}>{t.loading}</div>}
         {filteredPosts !== null && filteredPosts.length === 0 && <div style={{ textAlign: "center", color: `${paper}66`, padding: "60px 20px", fontSize: 15 }}>{t.empty}</div>}
 
-        {/* Articles List */}
         {filteredPosts !== null && filteredPosts.map((p) => {
-          const catObj = CATEGORIES.find(c => c.id === p.category);
+          const catObj = categories.find(c => c.id === p.category);
           const isSaved = savedIds.includes(p.id);
           const htmlContent = marked.parse(p.body || "");
 
           return (
-            <article key={p.id} className="article-card" style={{ background: paper, borderRadius: 14, padding: 22, marginBottom: 18, boxShadow: "0 4px 18px rgba(0,0,0,0.25)" }}>
+            <article key={p.id} className="article-card" style={{ background: paper, borderRadius: 14, padding: 22, marginBottom: 18, boxShadow: "0 4px 18px rgba(0,0,0,0.25)", border: p.isPinned ? `2px solid ${gold}` : "none" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                <h2 style={{ fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", fontSize: 22, fontWeight: 700, color: ink, margin: "0 0 8px" }}>{p.title}</h2>
+                <div>
+                  {p.isPinned && <span style={{ fontSize: 11, fontWeight: 700, color: gold, textTransform: "uppercase", display: "inline-block", marginBottom: 4 }}>📌 {t.pinned}</span>}
+                  <h2 style={{ fontFamily: lang === "ar" ? "'Amiri', serif" : "'Fraunces', serif", fontSize: 22, fontWeight: 700, color: ink, margin: "0 0 8px" }}>{p.title}</h2>
+                </div>
                 <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <button onClick={() => togglePin(p.id, p.isPinned)} title={t.pinned} style={{ background: "none", border: "none", cursor: "pointer", color: p.isPinned ? gold : ink, opacity: p.isPinned ? 1 : 0.4 }}><PinIcon size={17} filled={p.isPinned} /></button>
                   <button onClick={() => toggleBookmark(p.id)} title={t.bookmarks} style={{ background: "none", border: "none", cursor: "pointer", color: gold }}><BookmarkIcon size={17} filled={isSaved} /></button>
+                  <button onClick={() => copyToClipboard(p)} title={t.copied} style={{ background: "none", border: "none", cursor: "pointer", color: ink, opacity: 0.7 }}><CopyIcon size={17} /></button>
                   <button onClick={() => handleShare(p)} title={t.share} style={{ background: "none", border: "none", cursor: "pointer", color: gold }}><ShareIcon size={17} /></button>
                   <button onClick={() => handleEditClick(p)} title={t.edit} style={{ background: "none", border: "none", cursor: "pointer", color: ink, opacity: 0.7 }}><EditIcon size={17} /></button>
                   <button onClick={() => setConfirmId(p.id)} title={t.delete} style={{ background: "none", border: "none", cursor: "pointer", color: rust, opacity: 0.7 }}><TrashIcon size={17} /></button>
@@ -376,7 +414,7 @@ function Blog() {
                 <span>{p.author ? `${t.by} ${p.author} · ` : ""}{timeAgo(p.ts, lang)}</span>
                 <span>·</span>
                 <span>{t.readTime(getReadingTime(p.body, lang))}</span>
-                {catObj && <span style={{ background: `${ink}11`, borderRadius: 4, padding: "2px 6px", fontSize: 11, color: ink }}>{catObj[lang]}</span>}
+                {catObj && <span style={{ background: `${ink}11`, borderRadius: 4, padding: "2px 6px", fontSize: 11, color: ink }}>{catObj[lang] || catObj.ar}</span>}
               </div>
 
               <div 
