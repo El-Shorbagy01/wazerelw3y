@@ -43,17 +43,20 @@
 <div id="root"></div>
 
 <script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyCbHmwro6rGmo7FIpYfKWPb_-ThRW_JNZg",
-    authDomain: "wazerelw3y.firebaseapp.com",
-    projectId: "wazerelw3y",
-    storageBucket: "wazerelw3y.firebasestorage.app",
-    messagingSenderId: "955701325729",
-    appId: "1:955701325729:web:940c9487a2c3fbd23ea5e0",
-    measurementId: "G-WRJ92JQ2KF"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
+const firebaseConfig = {
+  apiKey: "AIzaSyAnX2qeUf0VPXth2QkHI-7I_YYadnj0xx8",
+  authDomain: "wazerelw3y-ceeef.firebaseapp.com",
+  projectId: "wazerelw3y-ceeef",
+  storageBucket: "wazerelw3y-ceeef.firebasestorage.app",
+  messagingSenderId: "598676332259",
+  appId: "1:598676332259:web:d5d688e7c7d2c68625efd6",
+  measurementId: "G-5SVYXBLQDD"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
 </script>
 
 <script type="text/babel">
@@ -71,10 +74,10 @@ const COPY = {
     dir: "rtl", brand: "وزير الوعي", tagline: "مساحة لكتابة ما يستحق أن يُقال",
     newPost: "مقالة جديدة", editPost: "تعديل المقالة", titlePlaceholder: "عنوان المقالة", 
     bodyPlaceholder: "اكتب هنا... (يدعم تنسيق Markdown)", linkPlaceholder: "رابط المقال الأصلي (اختياري)",
-    authorPlaceholder: "اسمك (اختياري)", publish: "نشر", update: "تحديث وتعديل", cancel: "إلغاء",
+    publish: "نشر", update: "تحديث وتعديل", cancel: "إلغاء",
     empty: "لا توجد مقالات بعد. ابدأ بكتابة أول مقالة.", delete: "حذف", edit: "تعديل",
     confirmDelete: "حذف هذه المقالة نهائيًا؟", yes: "نعم، احذف", no: "تراجع",
-    loading: "جارٍ التحميل...", by: "بقلم", switchLang: "English",
+    loading: "جارٍ التحميل...", switchLang: "English",
     allCategories: "الكل", bookmarks: "المحفوظات", searchPlaceholder: "ابحث عن مقالة أو كاتب...",
     copied: "تم نسخ النص!", sourceLink: "المقال الأصلي ↗",
     shareNote: "هذه المدونة مشتركة — كل من يفتح هذا الرابط يرى نفس المقالات.",
@@ -86,10 +89,10 @@ const COPY = {
     dir: "ltr", brand: "wazerelw3y", tagline: "a space for writing what's worth saying",
     newPost: "New article", editPost: "Edit article", titlePlaceholder: "Article title", 
     bodyPlaceholder: "Write here... (Markdown supported)", linkPlaceholder: "Original Article Link (optional)",
-    authorPlaceholder: "Your name (optional)", publish: "Publish", update: "Update & Save", cancel: "Cancel",
+    publish: "Publish", update: "Update & Save", cancel: "Cancel",
     empty: "No articles found.", delete: "Delete", edit: "Edit",
     confirmDelete: "Delete this article permanently?", yes: "Yes, delete", no: "Keep it",
-    loading: "Loading...", by: "by", switchLang: "العربية",
+    loading: "Loading...", switchLang: "العربية",
     allCategories: "All", bookmarks: "Saved", searchPlaceholder: "Search posts or authors...",
     copied: "Content copied!", sourceLink: "Original Source ↗",
     shareNote: "This blog is shared — anyone with this link sees the same articles.",
@@ -146,7 +149,13 @@ function Blog() {
   const [copiedId, setCopiedId] = useState(null);
   const [scrollProgress, setScrollProgress] = useState(0);
 
-  const [form, setForm] = useState({ title: "", body: "", author: "", link: "", category: "general", customCategory: "" });
+const [form, setForm] = useState({
+  title: "",
+  body: "",
+  link: "",
+  category: "general",
+  customCategory: ""
+});
   const [isAddingCustomCat, setIsAddingCustomCat] = useState(false);
   const titleRef = useRef(null);
   const t = COPY[lang];
@@ -181,60 +190,83 @@ function Blog() {
     await db.collection("posts").doc(id).update({ isPinned: !currentPinned });
   };
 
-  const resetForm = () => {
-    setForm({ title: "", body: "", author: "", link: "", category: "general", customCategory: "" });
-    setIsAddingCustomCat(false);
-    setEditingId(null);
-    setShowForm(false);
-  };
+ const resetForm = () => {
+  setForm({
+    title: "",
+    body: "",
+    link: "",
+    category: "general",
+    customCategory: ""
+  });
+  setIsAddingCustomCat(false);
+  setEditingId(null);
+  setShowForm(false);};
 
-  const handleEditClick = (p) => {
-    setForm({
-      title: p.title || "",
-      body: p.body || "",
-      author: p.author || "",
-      link: p.link || "",
-      category: p.category || "general",
-      customCategory: ""
-    });
-    setEditingId(p.id);
-    setShowForm(true);
-  };
 
-  async function submitPost(e) {
-    e.preventDefault();
-    if (!form.title.trim() || !form.body.trim()) return;
+const handleEditClick = (p) => {
+  setForm({
+    title: p.title || "",
+    body: p.body || "",
+    link: p.link || "",
+    category: p.category || "general",
+    customCategory: ""
+  });
+  setEditingId(p.id);
+  setShowForm(true);
+};
 
-    let finalCategory = form.category;
+async function submitPost(e) {
+  e.preventDefault();
 
-    if (isAddingCustomCat && form.customCategory.trim()) {
-      const catName = form.customCategory.trim();
-      const catId = catName.toLowerCase().replace(/\s+/g, "_");
-      
-      if (!categories.some(c => c.id === catId)) {
-        const newCat = { id: catId, ar: catName, en: catName };
-        setCategories(prev => [...prev, newCat]);
-      }
-      finalCategory = catId;
-    }
-
-    const payload = {
-      title: form.title.trim(),
-      body: form.body.trim(),
-      author: form.author.trim(),
-      link: form.link.trim(),
-      category: finalCategory,
-      updatedAt: Date.now()
-    };
-
-    if (editingId) {
-      await db.collection("posts").doc(editingId).update(payload);
-    } else {
-      await db.collection("posts").add({ ...payload, ts: Date.now(), isPinned: false });
-    }
-
-    resetForm();
+  // Don't allow a completely empty article
+  if (
+    !form.title.trim() &&
+    !form.body.trim() &&
+    !form.link.trim()
+  ) {
+    return;
   }
+
+  let finalCategory = form.category;
+
+  if (isAddingCustomCat && form.customCategory.trim()) {
+    const catName = form.customCategory.trim();
+    const catId = catName.toLowerCase().replace(/\s+/g, "_");
+
+    if (!categories.some(c => c.id === catId)) {
+      const newCat = {
+        id: catId,
+        ar: catName,
+        en: catName
+      };
+
+      setCategories(prev => [...prev, newCat]);
+    }
+
+    finalCategory = catId;
+  }
+
+  const payload = {
+    title: form.title.trim(),
+    body: form.body.trim(),
+    link: form.link.trim(),
+    category: finalCategory || "",
+    updatedAt: Date.now()
+  };
+
+  if (editingId) {
+    await db.collection("posts").doc(editingId).update(payload);
+  } else {
+    await db.collection("posts").add({
+      ...payload,
+      ts: Date.now(),
+      isPinned: false
+    });
+  }
+
+  resetForm();
+}
+
 
   async function doDelete(id) {
     await db.collection("posts").doc(id).delete();
@@ -300,16 +332,6 @@ function Blog() {
           <div style={{ position: "absolute", top: "50%", transform: "translateY(-50%)", [lang === "ar" ? "right" : "left"]: 12, color: `${paper}66`, display: "flex" }}>
             <SearchIcon size={16} />
           </div>
-          <input 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.searchPlaceholder}
-            style={{
-              width: "100%", background: `${paper}11`, border: `1px solid ${gold}33`, borderRadius: 10,
-              padding: lang === "ar" ? "10px 38px 10px 14px" : "10px 14px 10px 38px",
-              color: paper, fontSize: 14, outline: "none"
-            }}
-          />
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
@@ -411,7 +433,7 @@ function Blog() {
               {copiedId === p.id && <span style={{ fontSize: 12, color: rust, display: "block", marginBottom: 6 }}>{t.copied}</span>}
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: `${ink}77`, marginBottom: 12, flexWrap: "wrap" }}>
-                <span>{p.author ? `${t.by} ${p.author} · ` : ""}{timeAgo(p.ts, lang)}</span>
+                <span>{timeAgo(p.ts, lang)}</span>
                 <span>·</span>
                 <span>{t.readTime(getReadingTime(p.body, lang))}</span>
                 {catObj && <span style={{ background: `${ink}11`, borderRadius: 4, padding: "2px 6px", fontSize: 11, color: ink }}>{catObj[lang] || catObj.ar}</span>}
